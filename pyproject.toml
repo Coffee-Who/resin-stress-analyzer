@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "resin-stress-analyzer"
+version = "0.1.0"
+description = "光固化 3D 列印的熱應力與應力集中篩檢工具"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.24",
+    "trimesh>=4.0",
+    "shapely>=2.0",
+    "matplotlib>=3.7",
+    "mapbox-earcut>=1.0",
+    "networkx>=3.0",
+]
+
+[project.scripts]
+resin-stress = "resin_stress.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["resin_stress*"]
