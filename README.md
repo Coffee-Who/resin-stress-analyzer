@@ -1,0 +1,1 @@
+# resin-stress-analyzer
