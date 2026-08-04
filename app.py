@@ -50,7 +50,8 @@ with st.sidebar:
 
     uploaded = st.file_uploader(
         "上傳模型", type=["stl", "obj", "ply", "3mf", "off"],
-        help="單位視為 mm。若模型是以 cm 或 inch 建立，請調整下方的縮放倍率。")
+        help="單位視為 mm。若模型是以 cm 或 inch 建立，請調整下方的縮放倍率。"
+             "破面模型會嘗試自動修復。")
 
     materials = list_materials()
     mat_key = st.selectbox(
@@ -136,7 +137,14 @@ if result.mesh["faces"] > MAX_FACES_WARN:
     st.warning(f"模型有 {result.mesh['faces']:,} 個三角面，"
                "3D 檢視可能會卡。建議先減面再上傳。")
 if not result.mesh["watertight"]:
-    st.warning("網格不封閉，切片結果可能不完整——建議先修復模型。")
+    st.info("網格原本不封閉，已自動修復後才切片。若結果看起來怪怪的，"
+            "建議先用 Meshmixer / Blender / 3D Builder 修好再上傳。")
+bbox = result.mesh["bbox_mm"]
+if max(bbox) < 20:
+    st.warning(
+        f"模型只有 {bbox[0]} × {bbox[1]} × {bbox[2]} mm，尺寸偏小。"
+        "如果原始檔的單位不是 mm，請把左側「縮放倍率」設成 10（cm→mm）"
+        "或 25.4（inch→mm）後重新分析，否則溫升與應力都會被低估。")
 
 # --- 總評 ---
 lv = s["overall_level"]
