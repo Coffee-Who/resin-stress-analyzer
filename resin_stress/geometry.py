@@ -113,9 +113,10 @@ def slice_layers(mesh: trimesh.Trimesh, layer_height: float = 0.05,
     z_values = z_min + (np.arange(0, n_real, stride) + 0.5) * layer_height
 
     sections: List[LayerSection] = []
+    errors: List[str] = []
     empty = 0
     for i, z in enumerate(z_values):
-        polys = _section_polygons(mesh, float(z))
+        polys = _section_polygons(mesh, float(z), errors)
         if not polys:
             empty += 1
         if not polys:
@@ -131,12 +132,13 @@ def slice_layers(mesh: trimesh.Trimesh, layer_height: float = 0.05,
         )
     if len(sections) < 3:
         raise ValueError(_diagnose(mesh, height, layer_height,
-                                   len(z_values), empty))
+                                   len(z_values), empty, errors))
     return sections
 
 
 def _diagnose(mesh: trimesh.Trimesh, height: float, layer_height: float,
-              attempted: int, empty: int) -> str:
+              attempted: int, empty: int,
+              errors: List[str] | None = None) -> str:
     """切不出東西的時候，給一段看得懂的診斷訊息而不是一句抱怨。"""
     size = mesh.bounds[1] - mesh.bounds[0]
     lines = [
@@ -153,15 +155,29 @@ def _diagnose(mesh: trimesh.Trimesh, height: float, layer_height: float,
         lines.append("→ 網格不封閉（有破面或邊界），自動修復仍無法切片。"
                      "建議先用 Meshmixer / Blender / 3D Builder 修復後再試。")
     if empty >= attempted * 0.9 and mesh.is_watertight:
-        lines.append("→ 網格封閉但輪廓組不起來，可能有自交面或重疊實體。")
+        lines.append("→ 網格封閉但輪廓組不起來，可能是缺少相依套件或有自交面。")
+    if errors:
+        lines.append("→ 切片時實際發生的錯誤：")
+        lines.extend(f"   {e}" for e in errors)
+        lines.append("→ 請執行 `python -m resin_stress --selfcheck` 取得完整診斷。")
     return "\n".join(lines)
 
 
-def _section_polygons(mesh: trimesh.Trimesh, z: float) -> List[Polygon]:
-    """取得 z 高度的截面多邊形（世界座標 XY，含孔洞）。"""
+def _section_polygons(mesh: trimesh.Trimesh, z: float,
+                      errors: list | None = None) -> List[Polygon]:
+    """取得 z 高度的截面多邊形（世界座標 XY，含孔洞）。
+
+    切片失敗的原因（缺相依套件、網格病態…）會記進 errors，
+    最後由 _diagnose 回報，不要靜靜吞掉。
+    """
+    def note(exc: Exception, stage: str) -> None:
+        if errors is not None and len(errors) < 3:
+            errors.append(f"{stage}: {type(exc).__name__}: {exc}")
+
     try:
         section = mesh.section(plane_origin=[0, 0, z], plane_normal=[0, 0, 1])
-    except Exception:
+    except Exception as exc:
+        note(exc, "section")
         return []
     if section is None:
         return []
@@ -172,19 +188,22 @@ def _section_polygons(mesh: trimesh.Trimesh, z: float) -> List[Polygon]:
     project = getattr(section, "to_2D", None) or section.to_planar
     try:
         planar, _ = project(to_2D=to_2D)
-    except Exception:
+    except Exception as exc:
+        note(exc, "to_planar")
         return []
 
     polys = []
     try:
         polys = list(planar.polygons_full)     # 含孔洞，最理想
-    except Exception:
+    except Exception as exc:
+        note(exc, "polygons_full")
         polys = []
     if not polys:
         # 破面模型組不出 polygons_full，退而求其次用封閉迴圈
         try:
             polys = [p for p in planar.polygons_closed if p is not None]
-        except Exception:
+        except Exception as exc:
+            note(exc, "polygons_closed")
             return []
 
     return [p for p in polys if p.is_valid and p.area > 1e-6]

@@ -38,11 +38,17 @@ def build_parser() -> argparse.ArgumentParser:
                    choices=["ply", "glb", "obj"],
                    help="另外輸出帶頂點顏色的網格（可丟進 MeshLab / Blender）")
     p.add_argument("--list-materials", action="store_true", help="列出內建材料")
+    p.add_argument("--selfcheck", action="store_true",
+                   help="檢查執行環境與相依套件，並跑一次切片測試")
     return p
 
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.selfcheck:
+        from .selfcheck import run
+        return run()
 
     if args.list_materials:
         for key, mat in list_materials().items():

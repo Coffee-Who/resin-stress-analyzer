@@ -187,3 +187,8 @@ def test_demo_fillet_variant_is_safer():
     round_ = analyze_bytes(stl_bytes(2.0), "b.stl", "standard", st_,
                            with_3d=False).result.summary
     assert round_["overall_risk_score"] < sharp["overall_risk_score"]
+
+
+def test_selfcheck_passes_in_this_environment():
+    from resin_stress.selfcheck import run
+    assert run() == 0

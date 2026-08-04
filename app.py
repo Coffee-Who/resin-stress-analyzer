@@ -126,7 +126,11 @@ if go or demo:
                 exposure, lift_time, float(tilt), float(spin), scale,
                 max_layers)
         except Exception as exc:
-            st.error(f"分析失敗：{exc}")
+            st.error(f"分析失敗：\n\n{exc}")
+            with st.expander("環境檢查（切不出截面時多半是缺套件）"):
+                st.code("pip install -r requirements.txt\n"
+                        "python -m resin_stress --selfcheck", language="bash")
+                st.caption("把 selfcheck 的輸出整段貼出來，就能看出缺哪個套件。")
             st.stop()
 
 result, files, viewer = st.session_state["result"]
