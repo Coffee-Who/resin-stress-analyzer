@@ -35,16 +35,43 @@ class LayerSection:
         return float(np.sqrt(max(self.area, 0.0) / np.pi))
 
 
-def load_mesh(path: str, scale: float = 1.0) -> trimesh.Trimesh:
-    """載入 STL / OBJ / PLY / 3MF，回傳單一 Trimesh（單位假設為 mm）。"""
+def load_mesh(path: str, scale: float = 1.0,
+              repair: bool = True) -> trimesh.Trimesh:
+    """載入 STL / OBJ / PLY / 3MF，回傳單一 Trimesh（單位假設為 mm）。
+
+    實務上的 STL 很常有重複頂點、退化三角形、法線方向不一致或小破洞，
+    這些都會讓切片切不出封閉輪廓。預設會做基本修復。
+    """
     mesh = trimesh.load(path, force="mesh")
     if not isinstance(mesh, trimesh.Trimesh) or mesh.faces.shape[0] == 0:
         raise ValueError(f"無法從 {path} 讀出有效的三角網格")
+
     mesh = mesh.copy()
     if scale != 1.0:
         mesh.apply_scale(scale)
-    mesh.remove_unreferenced_vertices()
-    mesh.merge_vertices()
+
+    if repair:
+        for step in (mesh.merge_vertices,
+                     mesh.remove_unreferenced_vertices,
+                     mesh.remove_infinite_values,
+                     mesh.update_faces,
+                     mesh.fix_normals):
+            try:
+                if step is mesh.update_faces:
+                    mesh.update_faces(mesh.nondegenerate_faces())
+                    mesh.update_faces(mesh.unique_faces())
+                else:
+                    step()
+            except Exception:
+                pass
+        if not mesh.is_watertight:
+            try:
+                mesh.fill_holes()
+            except Exception:
+                pass
+    else:
+        mesh.remove_unreferenced_vertices()
+        mesh.merge_vertices()
     return mesh
 
 
@@ -86,8 +113,11 @@ def slice_layers(mesh: trimesh.Trimesh, layer_height: float = 0.05,
     z_values = z_min + (np.arange(0, n_real, stride) + 0.5) * layer_height
 
     sections: List[LayerSection] = []
+    empty = 0
     for i, z in enumerate(z_values):
         polys = _section_polygons(mesh, float(z))
+        if not polys:
+            empty += 1
         if not polys:
             continue
         area = float(sum(p.area for p in polys))
@@ -100,8 +130,31 @@ def slice_layers(mesh: trimesh.Trimesh, layer_height: float = 0.05,
                          centroid=(cx, cy))
         )
     if len(sections) < 3:
-        raise ValueError("有效截面層數不足，請檢查模型是否封閉或層厚設定")
+        raise ValueError(_diagnose(mesh, height, layer_height,
+                                   len(z_values), empty))
     return sections
+
+
+def _diagnose(mesh: trimesh.Trimesh, height: float, layer_height: float,
+              attempted: int, empty: int) -> str:
+    """切不出東西的時候，給一段看得懂的診斷訊息而不是一句抱怨。"""
+    size = mesh.bounds[1] - mesh.bounds[0]
+    lines = [
+        f"切不出有效截面（嘗試 {attempted} 層，其中 {empty} 層是空的）。",
+        f"模型尺寸 {size[0]:.2f} × {size[1]:.2f} × {size[2]:.2f} mm，"
+        f"層厚 {layer_height} mm。",
+    ]
+    if max(size) < 5.0:
+        factor = "10（cm→mm）或 25.4（inch→mm）"
+        lines.append(f"→ 模型非常小，很可能單位不是 mm。請把縮放倍率設成 {factor}。")
+    if height < layer_height * 10:
+        lines.append("→ 模型高度不到 10 層，請調小層厚。")
+    if not mesh.is_watertight:
+        lines.append("→ 網格不封閉（有破面或邊界），自動修復仍無法切片。"
+                     "建議先用 Meshmixer / Blender / 3D Builder 修復後再試。")
+    if empty >= attempted * 0.9 and mesh.is_watertight:
+        lines.append("→ 網格封閉但輪廓組不起來，可能有自交面或重疊實體。")
+    return "\n".join(lines)
 
 
 def _section_polygons(mesh: trimesh.Trimesh, z: float) -> List[Polygon]:
@@ -119,9 +172,20 @@ def _section_polygons(mesh: trimesh.Trimesh, z: float) -> List[Polygon]:
     project = getattr(section, "to_2D", None) or section.to_planar
     try:
         planar, _ = project(to_2D=to_2D)
-        polys = list(planar.polygons_full)
     except Exception:
         return []
+
+    polys = []
+    try:
+        polys = list(planar.polygons_full)     # 含孔洞，最理想
+    except Exception:
+        polys = []
+    if not polys:
+        # 破面模型組不出 polygons_full，退而求其次用封閉迴圈
+        try:
+            polys = [p for p in planar.polygons_closed if p is not None]
+        except Exception:
+            return []
 
     return [p for p in polys if p.is_valid and p.area > 1e-6]
 
