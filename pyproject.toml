@@ -18,6 +18,9 @@ dependencies = [
     "networkx>=3.0",
 ]
 
+[project.optional-dependencies]
+web = ["streamlit>=1.36", "pandas>=2.0"]
+
 [project.scripts]
 resin-stress = "resin_stress.cli:main"
 

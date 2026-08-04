@@ -160,3 +160,30 @@ def test_hotspot_colouring_is_local(parts, tmp_path):
     html = export_html(load_mesh(parts["sharp"]), res, tmp_path / "v.html")
     assert png.stat().st_size > 10000
     assert "three" in html.read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------- 網頁介面
+def test_bundle_produces_all_outputs():
+    """網頁介面走的是 analyze_bytes，確認它產得出全部輸出。"""
+    from resin_stress.bundle import analyze_bytes
+    from resin_stress.demo import stl_bytes
+
+    b = analyze_bytes(stl_bytes(), "demo.stl", "standard",
+                      PrintSettings(layer_height=0.1, max_layers=120))
+    assert b.result.summary["overall_risk_score"] > 0
+    for key in ("md", "csv", "json", "charts", "views", "ply"):
+        assert len(b.files[key]) > 500, key
+    assert "three" in b.viewer_html
+
+
+def test_demo_fillet_variant_is_safer():
+    """示範件的導圓角版本分數必須比尖角版低。"""
+    from resin_stress.bundle import analyze_bytes
+    from resin_stress.demo import stl_bytes
+
+    st_ = PrintSettings(layer_height=0.1, max_layers=120)
+    sharp = analyze_bytes(stl_bytes(0.0), "a.stl", "standard", st_,
+                          with_3d=False).result.summary
+    round_ = analyze_bytes(stl_bytes(2.0), "b.stl", "standard", st_,
+                           with_3d=False).result.summary
+    assert round_["overall_risk_score"] < sharp["overall_risk_score"]
