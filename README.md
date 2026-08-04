@@ -40,9 +40,27 @@ Python 3.10+。或直接 `pip install -e .` 安裝成 `resin-stress` 指令。
 
 ## 使用
 
+### 網頁介面（推薦）
+
+```bash
+streamlit run app.py
+```
+
+瀏覽器會自動開啟 `http://localhost:8501`。拖曳上傳 STL、左側調參數、
+按「開始分析」，3D 熱點圖就直接嵌在頁面上可以旋轉縮放，
+報告 / CSV / JSON / PNG / PLY 都有下載按鈕。
+沒有模型也可以按「用示範件試跑」先看效果。
+
+**這是本機伺服器**，模型不會上傳到任何地方。
+
+### 命令列
+
 ```bash
 # 產生一個故意設計得很糟的示範件
 python examples/make_demo_stl.py
+
+# 想看導圓角後的對照組
+python examples/make_demo_stl.py examples/demo_fillet.stl --fillet 2
 
 # 分析
 python -m resin_stress examples/demo_part.stl \
@@ -188,7 +206,7 @@ score        = 100 × (1 − e^(−1.2 × index))
 
 ## 校驗結果
 
-`tests/` 內含 12 項驗證，確認模型行為符合物理直覺。幾個代表性案例：
+`tests/` 內含 15 項驗證，確認模型行為符合物理直覺。幾個代表性案例：
 
 | 測試件 | 分數 | 主要驅動 |
 | --- | --- | --- |
@@ -243,7 +261,10 @@ resin_stress/
 ├── analyzer.py    主流程與評分
 ├── report.py      JSON / CSV / Markdown / 圖表
 ├── visualize.py   3D 熱點著色、算圖、互動網頁
+├── bundle.py      一次產出所有輸出（供網頁介面使用）
+├── demo.py        示範模型產生器
 └── cli.py         命令列介面
+app.py             Streamlit 網頁介面
 ```
 
 ## 授權
